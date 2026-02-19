@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    direction: rtl;
+    font-family: 'Segoe UI', 'Arial Hebrew', Arial, Helvetica, sans-serif;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-900;
+    direction: rtl;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  input,
+  textarea,
+  select {
+    direction: rtl;
+    text-align: right;
+  }
+}
+
+@layer utilities {
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .line-clamp-1 {
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
