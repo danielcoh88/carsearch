@@ -35,7 +35,9 @@ export default function CarCard({
   onDelete,
   onStatusChange,
 }: CarCardProps) {
-  const hasImage = car.imageUrl && car.imageUrl.length > 0
+  const primaryImage = car.images?.find((i) => i.isPrimary)?.url || car.images?.[0]?.url || car.imageUrl || ''
+  const hasImage = primaryImage.length > 0
+  const imageCount = car.images?.length ?? (car.imageUrl ? 1 : 0)
   const title = car.title || [car.make, car.model, car.year].filter(Boolean).join(' ') || 'רכב ללא שם'
 
   return (
@@ -49,7 +51,7 @@ export default function CarCard({
         <div className="w-full h-44 bg-gray-100 rounded-t-xl overflow-hidden flex items-center justify-center">
           {hasImage ? (
             <img
-              src={car.imageUrl}
+              src={primaryImage}
               alt={title}
               className="w-full h-full object-cover"
               onError={(e) => {
@@ -62,6 +64,15 @@ export default function CarCard({
                 <path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z" />
               </svg>
               <span className="text-xs mt-1">אין תמונה</span>
+            </div>
+          )}
+          {/* Image count badge */}
+          {imageCount > 1 && (
+            <div className="absolute bottom-2 left-2 bg-black/60 text-white text-xs px-2 py-0.5 rounded-full flex items-center gap-1">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              {imageCount}
             </div>
           )}
         </div>

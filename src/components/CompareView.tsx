@@ -153,8 +153,8 @@ export default function CompareView({ cars, customFieldDefs, onBack, onSelectCar
                 return (
                   <th key={car.id} className="py-3 px-3 text-center min-w-[140px]">
                     <div className="flex flex-col items-center gap-1">
-                      {car.imageUrl && (
-                        <img src={car.imageUrl} alt={title} className="w-16 h-12 object-cover rounded-lg" />
+                      {(car.images?.find((i) => i.isPrimary)?.url || car.images?.[0]?.url || car.imageUrl) && (
+                        <img src={car.images?.find((i) => i.isPrimary)?.url || car.images?.[0]?.url || car.imageUrl} alt={title} className="w-16 h-12 object-cover rounded-lg" />
                       )}
                       <button
                         className="text-sm font-semibold text-gray-800 hover:text-blue-600 hover:underline line-clamp-2"

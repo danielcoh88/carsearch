@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Car, CustomFieldDefinition } from '../types'
+import { Car, CarImage, CustomFieldDefinition } from '../types'
 import { fetchCarDetails, detectSource } from '../scraper'
 import { generateId } from '../storage'
+import ImageGallery from './ImageGallery'
 
 interface AddCarModalProps {
   onAdd: (car: Car) => void
@@ -34,6 +35,7 @@ export default function AddCarModal({ onAdd, onClose, customFieldDefs }: AddCarM
   const [fetchState, setFetchState] = useState<FetchState>('idle')
   const [fetchError, setFetchError] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
+  const [images, setImages] = useState<CarImage[]>([])
 
   const handleFetch = async () => {
     if (!url.trim()) return
@@ -57,6 +59,10 @@ export default function AddCarModal({ onAdd, onClose, customFieldDefs }: AddCarM
         gearType: data.gearType || '',
         imageUrl: data.imageUrl || '',
       })
+      // Seed gallery with fetched image
+      if (data.imageUrl) {
+        setImages([{ id: generateId(), url: data.imageUrl, isPrimary: true }])
+      }
       setFetchState('success')
       setMode('manual')
     } catch (err) {
@@ -86,7 +92,8 @@ export default function AddCarModal({ onAdd, onClose, customFieldDefs }: AddCarM
       engineSize: form.engineSize,
       fuelType: form.fuelType,
       gearType: form.gearType,
-      imageUrl: form.imageUrl,
+      imageUrl: (images.find((i) => i.isPrimary) || images[0])?.url || form.imageUrl || '',
+      images,
       status: 'interested',
       notes: [],
       customFields: customFieldDefs.map((d) => ({ fieldId: d.id, value: null })),
@@ -344,13 +351,14 @@ export default function AddCarModal({ onAdd, onClose, customFieldDefs }: AddCarM
                 </div>
 
                 <div className="col-span-2">
-                  <label className="block text-xs font-medium text-gray-500 mb-1">קישור לתמונה</label>
-                  <input
-                    value={form.imageUrl}
-                    onChange={(e) => setField('imageUrl', e.target.value)}
-                    placeholder="https://..."
-                    dir="ltr"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  <label className="block text-xs font-medium text-gray-500 mb-1">תמונות</label>
+                  <ImageGallery
+                    images={images}
+                    onChange={(imgs: CarImage[]) => {
+                      setImages(imgs)
+                      const primary = imgs.find((i) => i.isPrimary) || imgs[0]
+                      setField('imageUrl', primary?.url || '')
+                    }}
                   />
                 </div>
               </div>

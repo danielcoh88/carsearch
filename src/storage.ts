@@ -1,4 +1,18 @@
-import { Car, CustomFieldDefinition } from './types'
+import { Car, CarImage, CustomFieldDefinition } from './types'
+
+// Migrate old car records that don't have images[]
+function migrateCar(car: Car): Car {
+  if (!car.images) {
+    const images: CarImage[] = []
+    if (car.imageUrl) {
+      images.push({ id: crypto.randomUUID(), url: car.imageUrl, isPrimary: true })
+    }
+    return { ...car, images }
+  }
+  // Ensure imageUrl stays in sync with primary
+  const primary = car.images.find((i) => i.isPrimary) || car.images[0]
+  return { ...car, imageUrl: primary?.url ?? '' }
+}
 
 const CARS_KEY = 'cars_v1'
 const FIELDS_KEY = 'custom_fields_v1'
@@ -12,7 +26,8 @@ export function generateId(): string {
 export function getCars(): Car[] {
   try {
     const raw = localStorage.getItem(CARS_KEY)
-    return raw ? (JSON.parse(raw) as Car[]) : []
+    const cars: Car[] = raw ? (JSON.parse(raw) as Car[]) : []
+    return cars.map(migrateCar)
   } catch {
     return []
   }

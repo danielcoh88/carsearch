@@ -27,6 +27,12 @@ export interface CarNote {
   createdAt: string
 }
 
+export interface CarImage {
+  id: string
+  url: string        // data: base64 or https:// remote URL
+  isPrimary: boolean
+}
+
 export interface Car {
   id: string
   url: string
@@ -47,7 +53,8 @@ export interface Car {
   engineSize: string
   fuelType: string
   gearType: string
-  imageUrl: string
+  imageUrl: string   // primary image URL (derived from images[] for backward compat)
+  images: CarImage[] // all images
 
   // Status
   status: CarStatus

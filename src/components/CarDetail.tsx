@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Car, CarNote, CarStatus, CustomFieldDefinition, CustomFieldType } from '../types'
+import { Car, CarImage, CarNote, CarStatus, CustomFieldDefinition, CustomFieldType } from '../types'
 import { SOURCE_LABELS } from '../constants'
 import { generateId } from '../storage'
 import StatusBadge from './StatusBadge'
+import ImageGallery from './ImageGallery'
 
 interface CarDetailProps {
   car: Car
@@ -181,18 +182,15 @@ export default function CarDetail({ car, customFieldDefs, onUpdate, onDelete, on
         חזור לרשימה
       </button>
 
-      {/* Image */}
-      <div className="w-full h-56 sm:h-72 bg-gray-100 rounded-2xl overflow-hidden mb-4 flex items-center justify-center">
-        {car.imageUrl ? (
-          <img src={car.imageUrl} alt={title} className="w-full h-full object-cover" />
-        ) : (
-          <div className="flex flex-col items-center text-gray-300">
-            <svg className="w-20 h-20" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z" />
-            </svg>
-            <span className="text-sm mt-2">אין תמונה</span>
-          </div>
-        )}
+      {/* Image Gallery */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-4">
+        <ImageGallery
+          images={car.images || []}
+          onChange={(imgs: CarImage[]) => {
+            const primary = imgs.find((i) => i.isPrimary) || imgs[0]
+            update({ images: imgs, imageUrl: primary?.url ?? '' })
+          }}
+        />
       </div>
 
       {/* Header */}
@@ -274,9 +272,6 @@ export default function CarDetail({ car, customFieldDefs, onUpdate, onDelete, on
           <EditableField label="נפח מנוע" value={car.engineSize} onSave={(v) => updateField('engineSize', v)} />
           <EditableField label="סוג דלק" value={car.fuelType} onSave={(v) => updateField('fuelType', v)} />
           <EditableField label="תיבת הילוכים" value={car.gearType} onSave={(v) => updateField('gearType', v)} />
-          <div className="col-span-2">
-            <EditableField label="קישור לתמונה" value={car.imageUrl} onSave={(v) => updateField('imageUrl', v)} type="url" />
-          </div>
         </div>
       </div>
 
