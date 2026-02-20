@@ -2,7 +2,10 @@ import { Car } from './types'
 
 // Local proxy (proxy.js) takes priority — falls back to allorigins if not running
 const LOCAL_PROXY = 'http://localhost:3001'
-const CORS_PROXY = 'https://api.allorigins.win/get?url='
+const CORS_PROXIES = [
+  (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+  (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+]
 
 async function proxyFetch(url: string, signal: AbortSignal, isApi = false): Promise<string> {
   const endpoint = isApi ? `${LOCAL_PROXY}/api` : `${LOCAL_PROXY}/fetch`
@@ -15,15 +18,28 @@ async function proxyFetch(url: string, signal: AbortSignal, isApi = false): Prom
       if (json.contents) return json.contents
     }
   } catch {
-    // Local proxy not running — fall back to allorigins
+    // Local proxy not running — fall back to CORS proxies
   }
 
-  // Fallback to allorigins
-  const res = await fetch(`${CORS_PROXY}${encodeURIComponent(url)}`, { signal })
-  if (!res.ok) throw new Error(`שגיאת רשת: ${res.status}`)
-  const json = await res.json()
-  if (!json.contents) throw new Error('לא ניתן לקרוא תוכן הדף')
-  return json.contents
+  // Fallback to public CORS proxies
+  for (const buildUrl of CORS_PROXIES) {
+    try {
+      const res = await fetch(buildUrl(url), { signal })
+      if (!res.ok) continue
+      const contentType = res.headers.get('content-type') || ''
+      if (contentType.includes('json')) {
+        const json = await res.json()
+        if (json.contents) return json.contents
+      } else {
+        const text = await res.text()
+        if (text) return text
+      }
+    } catch {
+      continue
+    }
+  }
+
+  throw new Error('לא ניתן לגשת לדף — בדוק שהפרוקסי פועל (npm run proxy)')
 }
 
 export interface ScrapedCarData {
@@ -53,18 +69,37 @@ export function detectSource(url: string): Car['source'] {
 
 function extractYad2ItemId(url: string): string | null {
   // https://www.yad2.co.il/item/ab1cd2ef  →  "ab1cd2ef"
-  const match = url.match(/yad2\.co\.il\/item\/([a-zA-Z0-9]+)/)
+  // https://www.yad2.co.il/vehicles/item/ab1cd2ef
+  // https://www.yad2.co.il/realestate/item/ab1cd2ef
+  const match = url.match(/yad2\.co\.il\/(?:vehicles\/|realestate\/)?item\/([a-zA-Z0-9]+)/)
   return match ? match[1] : null
 }
 
 async function fetchFromYad2Api(itemId: string, signal: AbortSignal): Promise<ScrapedCarData> {
-  // Yad2's own internal API — same data the site uses
-  const apiUrl = `https://gw.yad2.co.il/item/feed/item?itemId=${itemId}`
+  // Try multiple Yad2 API endpoint patterns
+  const apiUrls = [
+    `https://gw.yad2.co.il/item/feed/item?itemId=${itemId}`,
+    `https://gw.yad2.co.il/feed-search/item/${itemId}`,
+    `https://www.yad2.co.il/api/item/${itemId}`,
+  ]
 
-  const text = await proxyFetch(apiUrl, signal, true)
+  let text = ''
+  for (const apiUrl of apiUrls) {
+    try {
+      text = await proxyFetch(apiUrl, signal, true)
+      if (text) break
+    } catch {
+      continue
+    }
+  }
   if (!text) throw new Error('תשובה ריקה מהשרת')
 
-  const json = JSON.parse(text)
+  let json: any
+  try {
+    json = JSON.parse(text)
+  } catch {
+    throw new Error('התקבל תוכן לא תקין מהשרת')
+  }
 
   // The API wraps data in json.data or json.item
   const item = json?.data?.item || json?.item || json?.data || {}
@@ -77,11 +112,11 @@ async function fetchFromYad2Api(itemId: string, signal: AbortSignal): Promise<Sc
     json?.data?.price?.price
 
   const images: string[] = []
-  const rawImages = item?.images || vehicle?.images || []
+  const rawImages = item?.images || vehicle?.images || item?.media?.images || []
   if (Array.isArray(rawImages)) {
     for (const img of rawImages) {
       const src = typeof img === 'string' ? img : img?.src || img?.url || img?.cdnUrl
-      if (src) { images.push(src); break }
+      if (src) images.push(src)
     }
   }
 
@@ -388,4 +423,22 @@ function extractCityFromText(text: string): string | undefined {
     if (text.includes(city)) return city
   }
   return undefined
+}
+
+// ─── Image-based extraction (via Claude Vision API) ─────────────────────────
+
+export async function fetchCarDetailsFromImage(base64Data: string): Promise<ScrapedCarData> {
+  const res = await fetch(`${LOCAL_PROXY}/extract-from-image`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image: base64Data }),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || 'שגיאה בחיבור לשרת — ודא שהפרוקסי פועל ושהוגדר ANTHROPIC_API_KEY')
+  }
+
+  const data = await res.json()
+  return data as ScrapedCarData
 }
