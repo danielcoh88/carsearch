@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Car, CarImage, CustomFieldDefinition } from '../types'
-import { fetchCarDetails, detectSource } from '../scraper'
+import { fetchCarDetails, fetchCarDetailsFromImage, detectSource } from '../scraper'
 import { generateId } from '../storage'
 import ImageGallery from './ImageGallery'
 
@@ -10,7 +10,7 @@ interface AddCarModalProps {
   customFieldDefs: CustomFieldDefinition[]
 }
 
-type Mode = 'url' | 'manual'
+type Mode = 'url' | 'image' | 'manual'
 type FetchState = 'idle' | 'loading' | 'success' | 'error'
 
 const EMPTY_FORM = {
@@ -36,6 +36,52 @@ export default function AddCarModal({ onAdd, onClose, customFieldDefs }: AddCarM
   const [fetchError, setFetchError] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
   const [images, setImages] = useState<CarImage[]>([])
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
+
+  const handleImageUpload = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setFetchError('יש לבחור קובץ תמונה')
+      setFetchState('error')
+      return
+    }
+
+    // Read file as base64
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+
+    setImagePreview(base64)
+    setFetchState('loading')
+    setFetchError('')
+
+    try {
+      const data = await fetchCarDetailsFromImage(base64)
+      setForm({
+        title: data.title || '',
+        make: data.make || '',
+        model: data.model || '',
+        year: data.year?.toString() || '',
+        price: data.price?.toString() || '',
+        km: data.km?.toString() || '',
+        hand: data.hand?.toString() || '',
+        color: data.color || '',
+        city: data.city || '',
+        engineSize: data.engineSize || '',
+        fuelType: data.fuelType || '',
+        gearType: data.gearType || '',
+        imageUrl: data.imageUrl || '',
+      })
+      setFetchState('success')
+      setMode('manual')
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : 'שגיאה בעיבוד התמונה')
+      setFetchState('error')
+    }
+  }
 
   const handleFetch = async () => {
     if (!url.trim()) return
@@ -137,6 +183,12 @@ export default function AddCarModal({ onAdd, onClose, customFieldDefs }: AddCarM
               הדבק קישור
             </button>
             <button
+              className={`flex-1 py-2 text-sm rounded-lg font-medium transition-colors ${mode === 'image' ? 'bg-white shadow-sm' : 'text-gray-500'}`}
+              onClick={() => setMode('image')}
+            >
+              העלה תמונה
+            </button>
+            <button
               className={`flex-1 py-2 text-sm rounded-lg font-medium transition-colors ${mode === 'manual' ? 'bg-white shadow-sm' : 'text-gray-500'}`}
               onClick={() => setMode('manual')}
             >
@@ -184,6 +236,78 @@ export default function AddCarModal({ onAdd, onClose, customFieldDefs }: AddCarM
                   'ייבא פרטים אוטומטית'
                 )}
               </button>
+
+              <p className="text-xs text-gray-400 text-center">
+                או{' '}
+                <button className="underline hover:text-gray-600" onClick={() => setMode('manual')}>
+                  הכנס פרטים ידנית
+                </button>
+              </p>
+            </div>
+          )}
+
+          {/* Image mode */}
+          {mode === 'image' && (
+            <div className="space-y-3">
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) handleImageUpload(file)
+                  e.target.value = ''
+                }}
+              />
+
+              {imagePreview && (
+                <div className="relative rounded-xl overflow-hidden bg-gray-100">
+                  <img
+                    src={imagePreview}
+                    alt="תמונה שהועלתה"
+                    className="w-full h-48 object-contain"
+                  />
+                </div>
+              )}
+
+              {fetchState === 'loading' && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-700 flex items-center gap-3">
+                  <div className="w-5 h-5 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin flex-shrink-0" />
+                  <div>
+                    <p className="font-medium">קורא פרטים מהתמונה...</p>
+                    <p className="text-xs text-blue-500 mt-0.5">משתמש ב-AI לזיהוי פרטי הרכב</p>
+                  </div>
+                </div>
+              )}
+
+              {fetchState === 'error' && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-sm text-yellow-800">
+                  <p className="font-medium mb-1">לא ניתן היה לקרוא פרטים מהתמונה</p>
+                  <p className="text-xs">{fetchError}</p>
+                  <p className="text-xs mt-1">ודא שהפרוקסי רץ עם ANTHROPIC_API_KEY, או הכנס פרטים ידנית</p>
+                </div>
+              )}
+
+              {fetchState !== 'loading' && (
+                <button
+                  onClick={() => imageInputRef.current?.click()}
+                  className="w-full border-2 border-dashed border-gray-200 rounded-xl py-8 flex flex-col items-center gap-2 hover:border-blue-300 hover:bg-blue-50/50 transition-colors cursor-pointer"
+                >
+                  <svg className="w-10 h-10 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                      d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                      d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-gray-500">
+                      {imagePreview ? 'העלה תמונה אחרת' : 'העלה צילום מסך של מודעת רכב'}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">ה-AI יזהה אוטומטית את פרטי הרכב מהתמונה</p>
+                  </div>
+                </button>
+              )}
 
               <p className="text-xs text-gray-400 text-center">
                 או{' '}
