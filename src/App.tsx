@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Car, CarStatus, CustomFieldDefinition } from './types'
 import {
   getCars,
@@ -10,11 +10,22 @@ import {
   exportData,
   importData,
 } from './storage'
+import {
+  getRoomCode,
+  isSyncEnabled,
+  subscribeToRoom,
+  syncCar,
+  syncDeleteCar,
+  syncFieldDef,
+  syncDeleteFieldDef,
+  pushAllToCloud,
+} from './sync'
 import CarList from './components/CarList'
 import CarDetail from './components/CarDetail'
 import CompareView from './components/CompareView'
 import AddCarModal from './components/AddCarModal'
 import CustomFieldEditor from './components/CustomFieldEditor'
+import SyncPanel from './components/SyncPanel'
 
 type View = 'list' | 'detail' | 'compare'
 
@@ -26,6 +37,42 @@ export default function App() {
   const [compareIds, setCompareIds] = useState<string[]>([])
   const [showAddModal, setShowAddModal] = useState(false)
   const [showFieldEditor, setShowFieldEditor] = useState(false)
+  const [syncing, setSyncing] = useState(() => isSyncEnabled())
+
+  // ─── Cloud Sync ────────────────────────────────────────────────────────────
+
+  const startSync = useCallback((_roomCode: string, isNew: boolean) => {
+    setSyncing(true)
+    if (isNew) {
+      // Push existing local data to the new room
+      pushAllToCloud(getCars(), getCustomFieldDefs()).catch(console.error)
+    }
+  }, [])
+
+  const stopSync = useCallback(() => {
+    setSyncing(false)
+  }, [])
+
+  useEffect(() => {
+    if (!syncing) return
+    const roomCode = getRoomCode()
+    if (!roomCode) return
+
+    const unsub = subscribeToRoom(
+      roomCode,
+      (cloudCars) => {
+        // Save cloud data to localStorage and update state
+        for (const car of cloudCars) saveCar(car)
+        setCars(cloudCars)
+      },
+      (cloudFields) => {
+        for (const def of cloudFields) saveCustomFieldDef(def)
+        setCustomFieldDefs(cloudFields)
+      }
+    )
+
+    return unsub
+  }, [syncing])
 
   // ─── Car CRUD ──────────────────────────────────────────────────────────────
 
@@ -33,11 +80,13 @@ export default function App() {
     saveCar(car)
     setCars(getCars())
     setShowAddModal(false)
+    if (syncing) syncCar(car).catch(console.error)
   }
 
   const handleUpdateCar = (car: Car) => {
     saveCar(car)
     setCars(getCars())
+    if (syncing) syncCar(car).catch(console.error)
   }
 
   const handleDeleteCar = (id: string) => {
@@ -48,6 +97,7 @@ export default function App() {
       setView('list')
       setSelectedCarId(null)
     }
+    if (syncing) syncDeleteCar(id).catch(console.error)
   }
 
   const handleStatusChange = (id: string, status: CarStatus) => {
@@ -80,12 +130,14 @@ export default function App() {
   const handleAddFieldDef = (def: CustomFieldDefinition) => {
     saveCustomFieldDef(def)
     setCustomFieldDefs(getCustomFieldDefs())
+    if (syncing) syncFieldDef(def).catch(console.error)
   }
 
   const handleDeleteFieldDef = (id: string) => {
     deleteCustomFieldDef(id)
     setCustomFieldDefs(getCustomFieldDefs())
     setCars(getCars()) // refresh cars since field values were stripped
+    if (syncing) syncDeleteFieldDef(id).catch(console.error)
   }
 
   // ─── Export / Import ───────────────────────────────────────────────────────
@@ -147,6 +199,13 @@ export default function App() {
           </button>
 
           <div className="flex items-center gap-2">
+            {/* Cloud sync */}
+            <SyncPanel
+              onSyncStart={startSync}
+              onSyncStop={stopSync}
+              isSyncing={syncing}
+            />
+
             {/* Compare badge */}
             {compareIds.length > 0 && view !== 'compare' && (
               <button
